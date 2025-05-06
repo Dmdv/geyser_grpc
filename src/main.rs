@@ -117,12 +117,14 @@ struct GrpcClient {
 
 impl GrpcClient {
     async fn connect(config: Config) -> Result<Self, AppError> {
+        info!("Creating channel to {}", config.grpc_url);
         let channel = Channel::from_shared(config.grpc_url.clone())
             .map_err(|e| anyhow::anyhow!("Invalid URI: {}", e))?
             .tls_config(ClientTlsConfig::new())?
             .connect()
             .await?;
 
+        info!("Channel created successfully");
         Ok(Self {
             client: GeyserClient::new(channel),
             config,
@@ -169,12 +171,24 @@ impl GrpcClient {
             self.config.grpc_x_token.parse().unwrap(),
         );
 
-        info!("Created subscription request with metadata");
+        info!("Created subscription request with metadata: {:?}", request.metadata());
 
-        let response = self.client.subscribe(request).await?;
-        info!("Successfully subscribed to GRPC stream");
-
-        Ok(response.into_inner())
+        let response = self.client.subscribe(request).await;
+        match response {
+            Ok(response) => {
+                info!("Received response from server: {:?}", response.metadata());
+                if response.metadata().get("grpc-status").is_some() {
+                    error!("Server returned error status in metadata");
+                    return Err(AppError::GrpcError(tonic::Status::internal("Server returned error status")));
+                }
+                info!("Successfully subscribed to GRPC stream");
+                Ok(response.into_inner())
+            }
+            Err(status) => {
+                error!("Failed to subscribe: code={}, message={}", status.code(), status.message());
+                Err(AppError::GrpcError(status))
+            }
+        }
     }
 }
 
@@ -184,7 +198,20 @@ async fn process_block_stream(
 ) -> Result<(), AppError> {
     info!("Starting to process stream...");
     
+    let mut message_count = 0u64;
+    let mut last_message_time = std::time::Instant::now();
+    
     while let Some(response) = stream.next().await {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(last_message_time);
+        message_count += 1;
+        last_message_time = now;
+        
+        info!(
+            "Message #{} received after {:?} since last message",
+            message_count, elapsed
+        );
+        
         match response {
             Ok(msg) => {
                 let update_type = msg.update.as_ref().map_or("None".to_string(), |u| match u {
@@ -199,9 +226,21 @@ async fn process_block_stream(
                 info!("Received message type: {:?}", update_type);
                 
                 match msg.update {
+                    Some(geyser::subscribe_update::Update::Account(account)) => {
+                        info!(
+                            "Account update received - pubkey: {}, owner: {}, lamports: {}, slot: {}", 
+                            account.pubkey, account.owner, account.lamports, account.slot,
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Slot(slot)) => {
+                        info!(
+                            "Slot update received - slot: {}, parent: {}, status: {}", 
+                            slot.slot, slot.parent, slot.status,
+                        );
+                    }
                     Some(geyser::subscribe_update::Update::Block(block)) => {
                         info!(
-                            "Block update: slot={}, transactions_count={}, accounts_count={}", 
+                            "Block update received - slot: {}, transactions: {}, accounts: {}", 
                             block.slot, 
                             block.transactions.len(),
                             block.accounts.len(),
@@ -213,23 +252,48 @@ async fn process_block_stream(
                             Err(e) => error!("Failed to send transaction for block {}: {:?}", block.slot, e),
                         }
                     }
-                    Some(geyser::subscribe_update::Update::Ping(_)) => {
-                        info!("Received ping response");
+                    Some(geyser::subscribe_update::Update::BlockMeta(meta)) => {
+                        info!(
+                            "Block meta update received - slot: {}, blockhash: {:?}", 
+                            meta.slot, meta.blockhash,
+                        );
                     }
-                    _ => {
-                        // Log other updates but don't process them
-                        info!("Received update of type: {}", update_type);
+                    Some(geyser::subscribe_update::Update::Entry(entry)) => {
+                        info!(
+                            "Entry update received - slot: {}, index: {}, transactions: {}", 
+                            entry.slot, entry.index, entry.transactions.len(),
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Ping(_)) => {
+                        info!("Ping message received");
+                    }
+                    Some(geyser::subscribe_update::Update::Transaction(tx)) => {
+                        info!(
+                            "Transaction update received - signature: {:?}, is_vote: {}", 
+                            tx.signature, tx.is_vote,
+                        );
+                    }
+                    None => {
+                        warn!("Received empty update message");
                     }
                 }
             }
             Err(e) => {
                 error!("Error receiving message: {:?}", e);
+                error!("Error details: code={}, message={}", e.code(), e.message());
+                if e.code() == tonic::Code::Unavailable {
+                    error!("Server is unavailable, will reconnect");
+                    return Ok(());
+                }
                 warn!("Continuing to listen for messages after error");
             }
         }
     }
     
-    info!("Stream ended");
+    error!("Stream ended unexpectedly after {} messages", message_count);
+    if message_count == 0 {
+        error!("No messages were received before stream ended");
+    }
     Ok(())
 }
 
