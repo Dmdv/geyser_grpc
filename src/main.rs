@@ -180,7 +180,7 @@ impl GrpcClient {
 
 async fn process_block_stream(
     mut stream: tonic::Streaming<geyser::SubscribeUpdate>,
-    _solana_client: &SolanaClient,
+    solana_client: &SolanaClient,
 ) -> Result<(), AppError> {
     info!("Starting to process stream...");
     
@@ -199,18 +199,6 @@ async fn process_block_stream(
                 info!("Received message type: {:?}", update_type);
                 
                 match msg.update {
-                    Some(geyser::subscribe_update::Update::Account(account)) => {
-                        info!(
-                            "Account update: pubkey={}, owner={}, lamports={}, slot={}", 
-                            account.pubkey, account.owner, account.lamports, account.slot,
-                        );
-                    }
-                    Some(geyser::subscribe_update::Update::Slot(slot)) => {
-                        info!(
-                            "Slot update: slot={}, parent={}, status={}", 
-                            slot.slot, slot.parent, slot.status,
-                        );
-                    }
                     Some(geyser::subscribe_update::Update::Block(block)) => {
                         info!(
                             "Block update: slot={}, transactions_count={}, accounts_count={}", 
@@ -218,27 +206,19 @@ async fn process_block_stream(
                             block.transactions.len(),
                             block.accounts.len(),
                         );
-                    }
-                    Some(geyser::subscribe_update::Update::BlockMeta(meta)) => {
-                        info!(
-                            "Block meta update: slot={}, blockhash={:?}", 
-                            meta.slot, meta.blockhash,
-                        );
-                    }
-                    Some(geyser::subscribe_update::Update::Entry(entry)) => {
-                        info!(
-                            "Entry update: slot={}, index={}, transactions_count={}", 
-                            entry.slot, entry.index, entry.transactions.len(),
-                        );
+                        
+                        // Send transaction when new block is received
+                        match solana_client.send_transaction().await {
+                            Ok(_) => info!("Successfully sent transaction for block {}", block.slot),
+                            Err(e) => error!("Failed to send transaction for block {}: {:?}", block.slot, e),
+                        }
                     }
                     Some(geyser::subscribe_update::Update::Ping(_)) => {
                         info!("Received ping response");
                     }
-                    Some(geyser::subscribe_update::Update::Transaction(_)) => {
-                        info!("Received transaction update (unexpected)");
-                    }
-                    None => {
-                        warn!("Received empty update");
+                    _ => {
+                        // Log other updates but don't process them
+                        info!("Received update of type: {}", update_type);
                     }
                 }
             }
