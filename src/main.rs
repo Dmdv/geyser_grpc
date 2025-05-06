@@ -179,13 +179,15 @@ impl GrpcClient {
             ping: false,
         });
 
+        info!("Creating subscription request with filters: {:?}", request.get_ref());
+
         let token = MetadataValue::from_str(&self.config.grpc_x_token)
             .map_err(|e| anyhow::anyhow!("Failed to create metadata value: {}", e))?;
         
         let mut request = request;
         request.metadata_mut().insert("x-token", token);
 
-        info!("Created subscription request");
+        info!("Created subscription request with metadata");
         let response = self.client.subscribe(request).await?;
         info!("Successfully subscribed to GRPC stream");
         
@@ -202,21 +204,30 @@ async fn process_block_stream(
     while let Some(response) = stream.next().await {
         match response {
             Ok(msg) => {
+                // Log raw message for debugging
+                info!("Received raw message: {:?}", msg);
+                
                 match msg.update {
                     Some(geyser::subscribe_update::Update::Account(account)) => {
                         info!(
-                            "Account update: pubkey={}, owner={}, lamports={}, slot={}", 
-                            account.pubkey, account.owner, account.lamports, account.slot
+                            "Account update: pubkey={}, owner={}, lamports={}, slot={}\nRaw data: {:?}", 
+                            account.pubkey, account.owner, account.lamports, account.slot,
+                            account.data
                         );
                     }
                     Some(geyser::subscribe_update::Update::Slot(slot)) => {
                         info!(
-                            "Slot update: slot={}, parent={}, status={}", 
-                            slot.slot, slot.parent, slot.status
+                            "Slot update: slot={}, parent={}, status={}\nRaw data: {:?}", 
+                            slot.slot, slot.parent, slot.status,
+                            slot
                         );
                     }
                     Some(geyser::subscribe_update::Update::Transaction(transaction)) => {
-                        info!("Transaction update: signature={}, is_vote={}", transaction.signature, transaction.is_vote);
+                        info!(
+                            "Transaction update: signature={}, is_vote={}\nTransaction info: {:?}", 
+                            transaction.signature, transaction.is_vote,
+                            transaction.transaction
+                        );
                         
                         match solana_client.send_transaction().await {
                             Ok(_) => info!("Successfully sent transaction after receiving transaction {}", transaction.signature),
@@ -225,22 +236,33 @@ async fn process_block_stream(
                     }
                     Some(geyser::subscribe_update::Update::Block(block)) => {
                         info!(
-                            "Block update: slot={}, transactions_count={}, accounts_count={}", 
+                            "Block update: slot={}, transactions_count={}, accounts_count={}\nRaw block data: {:?}", 
                             block.slot, 
                             block.transactions.len(),
-                            block.accounts.len()
+                            block.accounts.len(),
+                            block
                         );
+                        
+                        // Log individual transactions in the block
+                        for (i, tx) in block.transactions.iter().enumerate() {
+                            info!(
+                                "Block transaction {}: slot={}, signature={}, is_vote={}", 
+                                i, tx.slot, tx.signature, tx.is_vote
+                            );
+                        }
                     }
                     Some(geyser::subscribe_update::Update::BlockMeta(meta)) => {
                         info!(
-                            "Block meta update: slot={}, blockhash={:?}", 
-                            meta.slot, meta.blockhash
+                            "Block meta update: slot={}, blockhash={:?}\nRaw meta: {:?}", 
+                            meta.slot, meta.blockhash,
+                            meta
                         );
                     }
                     Some(geyser::subscribe_update::Update::Entry(entry)) => {
                         info!(
-                            "Entry update: slot={}, index={}, transactions_count={}", 
-                            entry.slot, entry.index, entry.transactions.len()
+                            "Entry update: slot={}, index={}, transactions_count={}\nRaw entry: {:?}", 
+                            entry.slot, entry.index, entry.transactions.len(),
+                            entry
                         );
                     }
                     Some(geyser::subscribe_update::Update::Ping(_)) => {
@@ -252,7 +274,7 @@ async fn process_block_stream(
                 }
             }
             Err(e) => {
-                error!("Error receiving message: {:?}", e);
+                error!("Error receiving message: {:?}\nError details: {:#?}", e, e);
                 return Err(AppError::GrpcError(e));
             }
         }
