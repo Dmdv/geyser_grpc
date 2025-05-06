@@ -133,9 +133,9 @@ impl GrpcClient {
         let mut blocks_map = HashMap::new();
         blocks_map.insert("blocks".to_string(), SubscribeRequestFilterBlocks {
             account_include: vec![],
-            include_transactions: true,
-            include_accounts: true,
-            include_entries: true,
+            include_transactions: false,
+            include_accounts: false,
+            include_entries: false,
         });
 
         let mut slots_map = HashMap::new();
@@ -143,26 +143,16 @@ impl GrpcClient {
             filter_by_commitment: true,
         });
 
-        let mut transactions_map = HashMap::new();
-        transactions_map.insert("transactions".to_string(), SubscribeRequestFilterTransactions {
-            vote: false,
-            failed: false,
-            signature: "".into(),
-            account_include: vec![],
-            account_exclude: vec![],
-            account_required: vec![],
-        });
-
         let request = Request::new(SubscribeRequest {
             accounts: HashMap::new(),
             slots: slots_map,
-            transactions: transactions_map,
+            transactions: HashMap::new(),
             blocks: blocks_map,
             blocks_meta: HashMap::new(),
             entry: HashMap::new(),
             commitment: GeyserCommitmentLevel::Confirmed as i32,
             accounts_data_slice: vec![],
-            ping: false,
+            ping: true,
         });
 
         info!("Creating subscription request with filters: {:?}", request.get_ref());
@@ -261,7 +251,7 @@ async fn process_block_stream(
             }
             Err(e) => {
                 error!("Error receiving message: {:?}\nError details: {:#?}", e, e);
-                return Err(AppError::GrpcError(e));
+                warn!("Continuing to listen for messages after error");
             }
         }
     }
@@ -272,42 +262,48 @@ async fn process_block_stream(
 
 async fn subscribe_to_blocks(config: &Config) -> Result<(), AppError> {
     let solana_client = SolanaClient::new(config)?;
-    let mut retry_count = 0;
-    let max_retries = 3;
     let retry_delay = Duration::from_secs(5);
 
-    while retry_count < max_retries {
-        info!("Attempt {} of {}", retry_count + 1, max_retries);
+    loop {
+        info!("Attempting to connect to GRPC server...");
         
-        let mut client = GrpcClient::connect(config.clone()).await?;
-        
-        match client.subscribe().await {
-            Ok(stream) => {
-                info!("Starting stream processing...");
-                match process_block_stream(stream, &solana_client).await {
-                    Ok(_) => {
-                        info!("Stream processing completed successfully");
-                        return Ok(());
+        match GrpcClient::connect(config.clone()).await {
+            Ok(mut client) => {
+                info!("Successfully connected to GRPC server");
+                
+                match client.subscribe().await {
+                    Ok(stream) => {
+                        info!("Starting stream processing...");
+                        match process_block_stream(stream, &solana_client).await {
+                            Ok(_) => {
+                                info!("Stream ended, waiting {} seconds before reconnecting...", retry_delay.as_secs());
+                                sleep(retry_delay).await;
+                                continue;
+                            }
+                            Err(e) => {
+                                error!("Stream processing error: {:?}", e);
+                                info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
+                                sleep(retry_delay).await;
+                                continue;
+                            }
+                        }
                     }
                     Err(e) => {
-                        error!("Stream processing error: {:?}", e);
+                        error!("Failed to subscribe to GRPC stream: {:?}", e);
+                        info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
+                        sleep(retry_delay).await;
+                        continue;
                     }
                 }
             }
             Err(e) => {
-                error!("Failed to subscribe to GRPC stream: {:?}", e);
+                error!("Failed to connect to GRPC server: {:?}", e);
+                info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
+                sleep(retry_delay).await;
+                continue;
             }
         }
-
-        retry_count += 1;
-        if retry_count < max_retries {
-            info!("Waiting {} seconds before retry...", retry_delay.as_secs());
-            sleep(retry_delay).await;
-        }
     }
-
-    error!("Max retries reached. Exiting...");
-    Ok(())
 }
 
 #[tokio::main]
@@ -361,17 +357,5 @@ async fn main() -> Result<(), AppError> {
     info!("Using config file: {}", args.config);
     info!("Config: {:?}", config);
 
-    // Run indefinitely with reconnection
-    loop {
-        match subscribe_to_blocks(&config).await {
-            Ok(_) => {
-                info!("Stream completed normally, reconnecting in 5 seconds...");
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-            Err(e) => {
-                error!("Error in stream processing: {:?}, reconnecting in 5 seconds...", e);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-        }
-    }
+    subscribe_to_blocks(&config).await
 } 
