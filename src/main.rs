@@ -1,11 +1,10 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signer, read_keypair_file},
     system_instruction,
     transaction::Transaction,
-    commitment_config::CommitmentLevel,
 };
 use solana_client::rpc_client::RpcClient;
 use std::{str::FromStr, time::Duration};
@@ -14,8 +13,7 @@ use std::fs;
 use tonic::{metadata::MetadataValue, Request, transport::{Channel, ClientTlsConfig}};
 use futures::StreamExt;
 use tokio::time::sleep;
-use tracing::{info, error, warn, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing::{info, error, warn};
 use tracing_subscriber::prelude::*;
 use thiserror::Error;
 use tracing_appender;
@@ -64,18 +62,6 @@ struct Config {
     keypair_file: String,
     destination_wallet: String,
     transfer_amount: u64,
-}
-
-impl Config {
-    fn new() -> Self {
-        Self {
-            grpc_url: "https://api.rpcpool.com".to_string(),
-            grpc_x_token: "your_token_here".to_string(),
-            keypair_file: "keypair.json".to_string(),
-            destination_wallet: "".to_string(),
-            transfer_amount: 0,
-        }
-    }
 }
 
 struct SolanaClient {
