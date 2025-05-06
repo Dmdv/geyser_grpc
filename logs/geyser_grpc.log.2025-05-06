@@ -1,0 +1,100 @@
+2025-05-06T14:21:45.577964Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: OutOfRange, message: "Error, message length too large: found 14531582 bytes, the limit is: 4194304 bytes", source: None }
+2025-05-06T14:21:45.57798Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: OutOfRange, message: "Error, message length too large: found 14531582 bytes, the limit is: 4194304 bytes", source: None })
+2025-05-06T14:21:51.912147Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: OutOfRange, message: "Error, message length too large: found 18557388 bytes, the limit is: 4194304 bytes", source: None }
+2025-05-06T14:21:51.912161Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: OutOfRange, message: "Error, message length too large: found 18557388 bytes, the limit is: 4194304 bytes", source: None })
+2025-05-06T14:21:58.644711Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: OutOfRange, message: "Error, message length too large: found 18300524 bytes, the limit is: 4194304 bytes", source: None }
+2025-05-06T14:21:58.644728Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: OutOfRange, message: "Error, message length too large: found 18300524 bytes, the limit is: 4194304 bytes", source: None })
+2025-05-06T14:21:58.644734Z ERROR main ThreadId(01) src/main.rs:264: Max retries reached. Exiting...
+2025-05-06T14:22:31.566695Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:22:31.5669Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:22:39.140103Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:22:39.140315Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:22:46.414651Z ERROR main ThreadId(01) src/main.rs:217: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:22:46.414862Z ERROR main ThreadId(01) src/main.rs:247: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:22:46.414883Z ERROR main ThreadId(01) src/main.rs:264: Max retries reached. Exiting...
+2025-05-06T14:23:25.033208Z ERROR main ThreadId(01) src/main.rs:212: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:23:25.033222Z ERROR main ThreadId(01) src/main.rs:242: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:23:31.1219Z ERROR main ThreadId(01) src/main.rs:212: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:23:31.121938Z ERROR main ThreadId(01) src/main.rs:242: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:23:37.094941Z ERROR main ThreadId(01) src/main.rs:212: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:23:37.094956Z ERROR main ThreadId(01) src/main.rs:242: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:23:37.094961Z ERROR main ThreadId(01) src/main.rs:259: Max retries reached. Exiting...
+2025-05-06T14:24:27.380701Z ERROR main ThreadId(01) src/main.rs:218: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:24:27.380725Z ERROR main ThreadId(01) src/main.rs:248: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:24:33.572267Z ERROR main ThreadId(01) src/main.rs:218: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:24:33.572324Z ERROR main ThreadId(01) src/main.rs:248: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:24:39.726676Z ERROR main ThreadId(01) src/main.rs:218: Error receiving message: Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None }
+2025-05-06T14:24:39.726692Z ERROR main ThreadId(01) src/main.rs:248: Stream processing error: GrpcError(Status { code: Internal, message: "failed to decode Protobuf message: SubscribeUpdate.update: delimited length exceeded", source: None })
+2025-05-06T14:24:39.726697Z ERROR main ThreadId(01) src/main.rs:264: Max retries reached. Exiting...
+2025-05-06T14:35:15.236393Z  INFO main ThreadId(01) src/main.rs:351: Starting geyser-grpc client...
+2025-05-06T14:35:15.23648Z  INFO main ThreadId(01) src/main.rs:352: Using config file: config.yaml
+2025-05-06T14:35:15.236494Z  INFO main ThreadId(01) src/main.rs:353: Config: Config { grpc_url: "https://grpc.ny.shyft.to", grpc_x_token: "b2b972c6-fff2-4b5c-aac9-375c6984b80e", keypair_file: "test-wallet2.json", destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr", transfer_amount: 1000000 }
+2025-05-06T14:35:15.242701Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:35:15.99636Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:35:16.227161Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:35:16.227191Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:35:16.227217Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:35:16.389699Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:35:16.389796Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:35:46.051526Z  INFO main ThreadId(01) src/main.rs:352: Starting geyser-grpc client...
+2025-05-06T14:35:46.051579Z  INFO main ThreadId(01) src/main.rs:353: Using config file: config.yaml
+2025-05-06T14:35:46.051593Z  INFO main ThreadId(01) src/main.rs:354: Config: Config { grpc_url: "https://grpc.ny.shyft.to", grpc_x_token: "b2b972c6-fff2-4b5c-aac9-375c6984b80e", keypair_file: "test-wallet2.json", destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr", transfer_amount: 1000000 }
+2025-05-06T14:35:46.058223Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:35:46.530716Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:35:46.760816Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:35:46.760845Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:35:46.760869Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:35:46.921531Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:35:46.92167Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:35:46.922032Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:35:51.926688Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:35:52.430891Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:35:52.663772Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:35:52.663913Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:35:52.663943Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:35:52.8211Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:35:52.82126Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:35:52.821459Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:35:57.823321Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:35:58.918838Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:35:59.301402Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:35:59.301473Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:35:59.301504Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:35:59.60406Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:35:59.604226Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:35:59.604894Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:36:04.608423Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:36:05.159522Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:36:05.394594Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:36:05.394695Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:36:05.394741Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:36:05.551431Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:36:05.551557Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:36:05.551822Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:36:10.555674Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:36:11.144939Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:36:11.403087Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:36:11.403129Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:36:11.403146Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:36:11.661513Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:36:11.661592Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:36:11.66175Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:37:05.877574Z  INFO main ThreadId(01) src/main.rs:352: Starting geyser-grpc client...
+2025-05-06T14:37:05.877626Z  INFO main ThreadId(01) src/main.rs:353: Using config file: config.yaml
+2025-05-06T14:37:05.877639Z  INFO main ThreadId(01) src/main.rs:354: Config: Config { grpc_url: "https://grpc.ny.shyft.to", grpc_x_token: "b2b972c6-fff2-4b5c-aac9-375c6984b80e", keypair_file: "test-wallet2.json", destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr", transfer_amount: 1000000 }
+2025-05-06T14:37:05.884912Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:37:06.464822Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:37:06.762825Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:37:06.762975Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:37:06.763082Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:37:06.862134Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:37:06.862335Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:37:06.862751Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...
+2025-05-06T14:37:11.868782Z  INFO main ThreadId(01) src/main.rs:272: Attempt 1 of 3
+2025-05-06T14:37:12.336677Z  INFO main ThreadId(01) src/main.rs:188: Created subscription request
+2025-05-06T14:37:12.566219Z  INFO main ThreadId(01) src/main.rs:190: Successfully subscribed to GRPC stream
+2025-05-06T14:37:12.566349Z  INFO main ThreadId(01) src/main.rs:278: Starting stream processing...
+2025-05-06T14:37:12.566408Z  INFO main ThreadId(01) src/main.rs:200: Starting to process stream...
+2025-05-06T14:37:12.724097Z  INFO main ThreadId(01) src/main.rs:261: Stream ended normally
+2025-05-06T14:37:12.724219Z  INFO main ThreadId(01) src/main.rs:281: Stream processing completed successfully
+2025-05-06T14:37:12.724465Z  INFO main ThreadId(01) src/main.rs:360: Stream completed normally, reconnecting in 5 seconds...

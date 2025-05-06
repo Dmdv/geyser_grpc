@@ -1,13 +1,38 @@
 # Geyser GRPC configuration
-grpc:
-  endpoint: "grpc.ny.shyft.to"
-  api_key: "b2b972c6-fff2-4b5c-aac9-375c6984b80e"
+grpc_url: "https://grpc.ny.shyft.to"
+grpc_x_token: "b2b972c6-fff2-4b5c-aac9-375c6984b80e"
 
 # Solana configuration
-solana:
-  # Path to your keypair file
-  keypair_file: "test-wallet2.json"
-  # Destination wallet address for SOL transfers
-  destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr"
-  # Amount of SOL to transfer (in lamports)
-  transfer_amount: 1000000  # 0.001 SOL 
+keypair_file: "test-wallet2.json"
+destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr"
+transfer_amount: 1000000  # 0.001 SOL
+
+libpath: "target/release/libgeyser_grpc.so"
+host: "0.0.0.0"
+port: 10000
+tls:
+  cert_path: ""
+  key_path: ""
+prometheus_address: "0.0.0.0:10001"
+filters:
+  accounts:
+    max: 1000
+    any: true
+    account_max: 1000
+  slots:
+    max: 1000
+  transactions:
+    max: 1000
+    any: true
+    account_include_max: 1000
+  blocks:
+    max: 1000
+    account_include_max: 1000
+    account_include_any: true
+    include_transactions: true
+    include_accounts: true
+    include_entries: true
+  blocks_meta:
+    max: 1000
+  entry:
+    max: 1000 

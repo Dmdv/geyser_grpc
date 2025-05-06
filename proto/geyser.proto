@@ -3,95 +3,286 @@ syntax = "proto3";
 package geyser;
 
 service Geyser {
-    rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+    rpc Subscribe(SubscribeRequest) returns (stream SubscribeUpdate);
+    rpc Ping(PingRequest) returns (PongResponse);
+    rpc GetLatestBlockhash(GetLatestBlockhashRequest) returns (GetLatestBlockhashResponse);
+    rpc GetBlockHeight(GetBlockHeightRequest) returns (GetBlockHeightResponse);
+    rpc GetSlot(GetSlotRequest) returns (GetSlotResponse);
+    rpc IsBlockhashValid(IsBlockhashValidRequest) returns (IsBlockhashValidResponse);
+    rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
 }
 
 message SubscribeRequest {
-    repeated SubscribeRequestFilter filters = 1;
-    CommitmentLevel commitment = 2;
+    map<string, SubscribeRequestFilterAccounts> accounts = 1;
+    map<string, SubscribeRequestFilterSlots> slots = 2;
+    map<string, SubscribeRequestFilterTransactions> transactions = 3;
+    map<string, SubscribeRequestFilterBlocks> blocks = 4;
+    map<string, SubscribeRequestFilterBlocksMeta> blocks_meta = 5;
+    map<string, SubscribeRequestFilterEntry> entry = 6;
+    int32 commitment = 7;
+    repeated SubscribeRequestAccountsDataSlice accounts_data_slice = 8;
+    bool ping = 9;
 }
 
-message SubscribeRequestFilter {
+message SubscribeRequestFilterAccounts {
+    repeated string account = 1;
+    repeated string owner = 2;
+    repeated SubscribeRequestFilterAccountsFilter filters = 3;
+}
+
+message SubscribeRequestFilterAccountsFilter {
     oneof filter {
-        AccountFilter account = 1;
-        SlotFilter slot = 2;
-        TransactionFilter transaction = 3;
-        BlockFilter block = 4;
+        uint64 memcmp_len = 1;
+        SubscribeRequestFilterAccountsFilterMemcmp memcmp = 2;
     }
 }
 
-message AccountFilter {
-    string account = 1;
-    bool owner = 2;
-    repeated string filters = 3;
+message SubscribeRequestFilterAccountsFilterMemcmp {
+    uint64 offset = 1;
+    bytes bytes = 2;
+    string base58 = 3;
+    string base64 = 4;
 }
 
-message SlotFilter {
+message SubscribeRequestFilterSlots {
     bool filter_by_commitment = 1;
 }
 
-message TransactionFilter {
-    string vote = 1;
+message SubscribeRequestFilterTransactions {
+    bool vote = 1;
     bool failed = 2;
     string signature = 3;
-    string account_include = 4;
-    string account_exclude = 5;
+    repeated string account_include = 4;
+    repeated string account_exclude = 5;
+    repeated string account_required = 6;
 }
 
-message BlockFilter {
-    bool filter_by_commitment = 1;
+message SubscribeRequestFilterBlocks {
+    repeated string account_include = 1;
+    bool include_transactions = 2;
+    bool include_accounts = 3;
+    bool include_entries = 4;
+}
+
+message SubscribeRequestFilterBlocksMeta {
+}
+
+message SubscribeRequestFilterEntry {
+}
+
+message SubscribeRequestAccountsDataSlice {
+    uint64 offset = 1;
+    uint64 length = 2;
+}
+
+message SubscribeUpdate {
+    oneof update {
+        SubscribeUpdateAccount account = 1;
+        SubscribeUpdateSlot slot = 2;
+        SubscribeUpdateTransaction transaction = 3;
+        SubscribeUpdateBlock block = 4;
+        SubscribeUpdateBlockMeta block_meta = 5;
+        SubscribeUpdateEntry entry = 6;
+        Ping ping = 7;
+    }
+}
+
+message SubscribeUpdateAccount {
+    string pubkey = 1;
+    string owner = 2;
+    bytes data = 3;
+    uint64 lamports = 4;
+    uint64 slot = 5;
+    bool executable = 6;
+    uint64 rent_epoch = 7;
+    int32 write_version = 8;
+    repeated string txn_signature = 9;
+}
+
+message SubscribeUpdateSlot {
+    uint64 slot = 1;
+    uint64 parent = 2;
+    int32 status = 3;
+}
+
+message SubscribeUpdateTransaction {
+    string signature = 1;
+    bool is_vote = 2;
+    TransactionInfo transaction = 3;
+}
+
+message TransactionInfo {
+    uint64 slot = 1;
+    string signature = 2;
+    bool is_vote = 3;
+    MessageHeader message_header = 4;
+    repeated string message_addresses = 5;
+    repeated MessageInstruction message_instructions = 6;
+    repeated MessageAddressTableLookup message_address_table_lookups = 7;
+    repeated AccountBalance pre_balances = 8;
+    repeated AccountBalance post_balances = 9;
+    repeated AccountBalance pre_token_balances = 10;
+    repeated AccountBalance post_token_balances = 11;
+    repeated InnerInstructions inner_instructions = 12;
+    repeated string rewards = 13;
+    repeated TokenBalance pre_token_balance = 14;
+    repeated TokenBalance post_token_balance = 15;
+    repeated LoadedAddresses loaded_addresses = 16;
+    repeated ReturnData return_data = 17;
+    ComputeUnitsConsumed compute_units_consumed = 18;
+}
+
+message MessageHeader {
+    uint32 num_required_signatures = 1;
+    uint32 num_readonly_signed_accounts = 2;
+    uint32 num_readonly_unsigned_accounts = 3;
+}
+
+message MessageInstruction {
+    uint32 program_id_index = 1;
+    repeated uint32 accounts = 2;
+    bytes data = 3;
+}
+
+message MessageAddressTableLookup {
+    string account_key = 1;
+    repeated uint32 writable_indexes = 2;
+    repeated uint32 readonly_indexes = 3;
+}
+
+message AccountBalance {
+    uint64 account_index = 1;
+    uint64 balance = 2;
+}
+
+message InnerInstructions {
+    uint32 index = 1;
+    repeated InnerInstruction instructions = 2;
+}
+
+message InnerInstruction {
+    uint32 program_id_index = 1;
+    repeated uint32 accounts = 2;
+    bytes data = 3;
+}
+
+message TokenBalance {
+    uint64 account_index = 1;
+    string mint = 2;
+    string owner = 3;
+    string program_id = 4;
+    uint64 amount = 5;
+    uint32 decimals = 6;
+}
+
+message LoadedAddresses {
+    repeated string writable = 1;
+    repeated string readonly = 2;
+}
+
+message ReturnData {
+    string program_id = 1;
+    bytes data = 2;
+}
+
+message ComputeUnitsConsumed {
+    uint64 units = 1;
+    uint64 units_limit = 2;
+}
+
+message SubscribeUpdateBlock {
+    uint64 slot = 1;
+    repeated string blockhash = 2;
+    repeated string rewards = 3;
+    repeated TransactionInfo transactions = 4;
+    repeated UpdateAccount accounts = 5;
+    repeated Entry entries = 6;
+}
+
+message UpdateAccount {
+    string pubkey = 1;
+    string owner = 2;
+    bytes data = 3;
+    uint64 lamports = 4;
+    bool executable = 5;
+    uint64 rent_epoch = 6;
+    int32 write_version = 7;
+}
+
+message Entry {
+    uint32 num_hashes = 1;
+    string hash = 2;
+    repeated bytes transactions = 3;
+}
+
+message SubscribeUpdateBlockMeta {
+    uint64 slot = 1;
+    repeated string blockhash = 2;
+    repeated string rewards = 3;
+}
+
+message SubscribeUpdateEntry {
+    uint64 slot = 1;
+    uint32 index = 2;
+    uint32 num_hashes = 3;
+    string hash = 4;
+    repeated bytes transactions = 5;
+}
+
+message Ping {
+}
+
+message PingRequest {
+}
+
+message PongResponse {
+}
+
+message GetLatestBlockhashRequest {
+    int32 commitment = 1;
+}
+
+message GetLatestBlockhashResponse {
+    uint64 slot = 1;
+    string blockhash = 2;
+    uint64 last_valid_block_height = 3;
+}
+
+message GetBlockHeightRequest {
+    int32 commitment = 1;
+}
+
+message GetBlockHeightResponse {
+    uint64 block_height = 1;
+}
+
+message GetSlotRequest {
+    int32 commitment = 1;
+}
+
+message GetSlotResponse {
+    uint64 slot = 1;
+}
+
+message IsBlockhashValidRequest {
+    string blockhash = 1;
+    int32 commitment = 2;
+}
+
+message IsBlockhashValidResponse {
+    uint64 slot = 1;
+    bool valid = 2;
+}
+
+message GetVersionRequest {
+}
+
+message GetVersionResponse {
+    string version = 1;
 }
 
 enum CommitmentLevel {
     PROCESSED = 0;
     CONFIRMED = 1;
     FINALIZED = 2;
-}
-
-message SubscribeResponse {
-    oneof response {
-        SlotUpdate slot = 1;
-        BlockUpdate block = 2;
-        TransactionUpdate transaction = 3;
-        AccountUpdate account = 4;
-    }
-}
-
-message SlotUpdate {
-    uint64 slot = 1;
-    string parent = 2;
-    CommitmentLevel commitment = 3;
-}
-
-message BlockUpdate {
-    uint64 slot = 1;
-    string blockhash = 2;
-    uint64 block_time = 3;
-    CommitmentLevel commitment = 4;
-}
-
-message TransactionUpdate {
-    string signature = 1;
-    bool is_vote = 2;
-    TransactionInfo transaction = 3;
-    CommitmentLevel commitment = 4;
-}
-
-message TransactionInfo {
-    bytes transaction = 1;
-    TransactionStatus meta = 2;
-}
-
-message TransactionStatus {
-    uint64 slot = 1;
-    string err = 2;
-    repeated string logs = 3;
-}
-
-message AccountUpdate {
-    string account = 1;
-    uint64 slot = 2;
-    bytes data = 3;
-    string owner = 4;
-    CommitmentLevel commitment = 5;
 } 

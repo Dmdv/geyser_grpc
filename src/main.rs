@@ -2,20 +2,24 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use solana_sdk::{
     pubkey::Pubkey,
-    signature::Keypair,
+    signature::{Keypair, Signer, read_keypair_file},
     system_instruction,
     transaction::Transaction,
-    signature::Signer,
-    signature::read_keypair_file,
+    commitment_config::CommitmentLevel,
 };
 use solana_client::rpc_client::RpcClient;
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 use serde::Deserialize;
 use std::fs;
 use tonic::{metadata::MetadataValue, Request, transport::{Channel, ClientTlsConfig}};
 use futures::StreamExt;
-use std::time::Duration;
 use tokio::time::sleep;
+use tracing::{info, error, warn, Level};
+use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::prelude::*;
+use thiserror::Error;
+use tracing_appender;
+use std::collections::HashMap;
 
 mod geyser {
     tonic::include_proto!("geyser");
@@ -23,11 +27,28 @@ mod geyser {
 
 use geyser::{
     geyser_client::GeyserClient,
+    CommitmentLevel as GeyserCommitmentLevel,
     SubscribeRequest,
-    SubscribeRequestFilter,
-    BlockFilter,
-    CommitmentLevel,
+    SubscribeRequestFilterBlocks,
+    SubscribeRequestFilterSlots,
+    SubscribeRequestFilterTransactions,
 };
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("GRPC error: {0}")]
+    GrpcError(#[from] tonic::Status),
+    #[error("Transport error: {0}")]
+    TransportError(#[from] tonic::transport::Error),
+    #[error("Solana error: {0}")]
+    SolanaError(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Anyhow error: {0}")]
+    AnyhowError(#[from] anyhow::Error),
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -36,173 +57,313 @@ struct Args {
     config: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct Config {
-    grpc: GrpcConfig,
-    solana: SolanaConfig,
-}
-
-#[derive(Debug, Deserialize)]
-struct GrpcConfig {
-    endpoint: String,
-    api_key: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct SolanaConfig {
+    grpc_url: String,
+    grpc_x_token: String,
     keypair_file: String,
     destination_wallet: String,
     transfer_amount: u64,
 }
 
-async fn send_sol_transaction(
-    rpc_client: &RpcClient,
-    keypair: &Keypair,
-    destination: &Pubkey,
-    amount: u64,
-) -> Result<()> {
-    let recent_blockhash = rpc_client
-        .get_latest_blockhash()
-        .context("Failed to get recent blockhash")?;
-
-    let transaction = Transaction::new_signed_with_payer(
-        &[system_instruction::transfer(
-            &keypair.pubkey(),
-            destination,
-            amount,
-        )],
-        Some(&keypair.pubkey()),
-        &[keypair],
-        recent_blockhash,
-    );
-
-    let signature = rpc_client
-        .send_and_confirm_transaction(&transaction)
-        .context("Failed to send transaction")?;
-
-    println!("Transaction sent! Signature: {}", signature);
-    Ok(())
+impl Config {
+    fn new() -> Self {
+        Self {
+            grpc_url: "https://api.rpcpool.com".to_string(),
+            grpc_x_token: "your_token_here".to_string(),
+            keypair_file: "keypair.json".to_string(),
+            destination_wallet: "".to_string(),
+            transfer_amount: 0,
+        }
+    }
 }
 
-async fn create_grpc_client(config: &Config) -> Result<GeyserClient<Channel>> {
-    println!("Connecting to GRPC endpoint: {}", config.grpc.endpoint);
-    let tls = ClientTlsConfig::new()
-        .domain_name(&config.grpc.endpoint);
-        
-    let channel = Channel::from_shared(format!("https://{}", config.grpc.endpoint))
-        .context("Invalid GRPC endpoint")?
-        .tls_config(tls)?
-        .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(30))
-        .connect()
-        .await
-        .context("Failed to create GRPC channel")?;
-    println!("Successfully created GRPC channel");
-
-    let client = GeyserClient::new(channel);
-
-    Ok(client)
+struct SolanaClient {
+    rpc_client: RpcClient,
+    keypair: Keypair,
+    destination_pubkey: Pubkey,
+    transfer_amount: u64,
 }
 
-async fn subscribe_to_blocks(config: &Config) -> Result<()> {
-    let mut retry_count = 0;
-    let max_retries = 3;
-    let retry_delay = Duration::from_secs(5);
+impl SolanaClient {
+    fn new(config: &Config) -> Result<Self, AppError> {
+        let rpc_client = RpcClient::new("https://api.devnet.solana.com".to_string());
+        let keypair = read_keypair_file(&config.keypair_file)
+            .map_err(|e| AppError::ConfigError(format!("Failed to read keypair file: {}", e)))?;
+        let destination_pubkey = Pubkey::from_str(&config.destination_wallet)
+            .map_err(|e| AppError::ConfigError(format!("Invalid destination wallet address: {}", e)))?;
 
-    // Initialize Solana client and keypair outside the loop
-    let rpc_client = RpcClient::new("https://api.devnet.solana.com".to_string());
-    let keypair = read_keypair_file(&config.solana.keypair_file)
-        .map_err(|e| anyhow::anyhow!("Failed to read keypair file: {}", e))?;
-    let destination_pubkey = Pubkey::from_str(&config.solana.destination_wallet)
-        .context("Invalid destination wallet address")?;
+        Ok(Self {
+            rpc_client,
+            keypair,
+            destination_pubkey,
+            transfer_amount: config.transfer_amount,
+        })
+    }
 
-    while retry_count < max_retries {
-        let mut client = create_grpc_client(config).await?;
+    async fn send_transaction(&self) -> Result<(), AppError> {
+        let recent_blockhash = self.rpc_client
+            .get_latest_blockhash()
+            .map_err(|e| AppError::SolanaError(format!("Failed to get recent blockhash: {}", e)))?;
 
-        let mut request = Request::new(SubscribeRequest {
-            filters: vec![
-                SubscribeRequestFilter {
-                    filter: Some(geyser::subscribe_request_filter::Filter::Block(
-                        BlockFilter {
-                            filter_by_commitment: true,
-                        },
-                    )),
-                },
-            ],
-            commitment: CommitmentLevel::Confirmed as i32,
+        let transaction = Transaction::new_signed_with_payer(
+            &[system_instruction::transfer(
+                &self.keypair.pubkey(),
+                &self.destination_pubkey,
+                self.transfer_amount,
+            )],
+            Some(&self.keypair.pubkey()),
+            &[&self.keypair],
+            recent_blockhash,
+        );
+
+        let signature = self.rpc_client
+            .send_and_confirm_transaction(&transaction)
+            .map_err(|e| AppError::SolanaError(format!("Failed to send transaction: {}", e)))?;
+
+        info!("Transaction sent! Signature: {}", signature);
+        Ok(())
+    }
+}
+
+struct GrpcClient {
+    client: GeyserClient<Channel>,
+    config: Config,
+}
+
+impl GrpcClient {
+    async fn connect(config: Config) -> Result<Self> {
+        let channel = Channel::from_shared(config.grpc_url.clone())?
+            .tls_config(ClientTlsConfig::new())?
+            .connect()
+            .await?;
+
+        let client = GeyserClient::new(channel);
+
+        Ok(Self { client, config })
+    }
+
+    async fn subscribe(&mut self) -> Result<tonic::Streaming<geyser::SubscribeUpdate>> {
+        let mut blocks_map = HashMap::new();
+        blocks_map.insert("blocks".to_string(), SubscribeRequestFilterBlocks {
+            account_include: vec![],
+            include_transactions: true,
+            include_accounts: true,
+            include_entries: true,
         });
 
-        let token = MetadataValue::from_str(&config.grpc.api_key)
+        let mut slots_map = HashMap::new();
+        slots_map.insert("slots".to_string(), SubscribeRequestFilterSlots {
+            filter_by_commitment: true,
+        });
+
+        let mut transactions_map = HashMap::new();
+        transactions_map.insert("transactions".to_string(), SubscribeRequestFilterTransactions {
+            vote: false,
+            failed: false,
+            signature: "".into(),
+            account_include: vec![],
+            account_exclude: vec![],
+            account_required: vec![],
+        });
+
+        let request = Request::new(SubscribeRequest {
+            accounts: HashMap::new(),
+            slots: slots_map,
+            transactions: transactions_map,
+            blocks: blocks_map,
+            blocks_meta: HashMap::new(),
+            entry: HashMap::new(),
+            commitment: GeyserCommitmentLevel::Confirmed as i32,
+            accounts_data_slice: vec![],
+            ping: false,
+        });
+
+        let token = MetadataValue::from_str(&self.config.grpc_x_token)
             .map_err(|e| anyhow::anyhow!("Failed to create metadata value: {}", e))?;
+        
+        let mut request = request;
         request.metadata_mut().insert("x-token", token);
 
-        println!("Created subscription request: {:?}", request.get_ref());
-        println!("Attempting to subscribe to GRPC stream...");
+        info!("Created subscription request");
+        let response = self.client.subscribe(request).await?;
+        info!("Successfully subscribed to GRPC stream");
+        
+        Ok(response.into_inner())
+    }
+}
 
-        match client.subscribe(request).await {
-            Ok(response) => {
-                println!("Successfully subscribed to GRPC stream");
-                println!("Response metadata: {:?}", response.metadata());
-                let mut stream = response.into_inner();
-
-                while let Some(response) = stream.next().await {
-                    match response {
-                        Ok(msg) => {
-                            println!("Received message: {:?}", msg);
-                            if let Some(geyser::subscribe_response::Response::Block(block)) = msg.response {
-                                println!("New block detected! Slot: {}", block.slot);
-                                
-                                // Send SOL transfer
-                                if let Err(e) = send_sol_transaction(
-                                    &rpc_client,
-                                    &keypair,
-                                    &destination_pubkey,
-                                    config.solana.transfer_amount,
-                                ).await {
-                                    eprintln!("Failed to send transaction: {}", e);
-                                }
-                            } else {
-                                println!("Received message but it's not a block update: {:?}", msg);
-                            }
+async fn process_block_stream(
+    mut stream: tonic::Streaming<geyser::SubscribeUpdate>,
+    solana_client: &SolanaClient,
+) -> Result<(), AppError> {
+    info!("Starting to process stream...");
+    
+    while let Some(response) = stream.next().await {
+        match response {
+            Ok(msg) => {
+                match msg.update {
+                    Some(geyser::subscribe_update::Update::Account(account)) => {
+                        info!(
+                            "Account update: pubkey={}, owner={}, lamports={}, slot={}", 
+                            account.pubkey, account.owner, account.lamports, account.slot
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Slot(slot)) => {
+                        info!(
+                            "Slot update: slot={}, parent={}, status={}", 
+                            slot.slot, slot.parent, slot.status
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Transaction(transaction)) => {
+                        info!("Transaction update: signature={}, is_vote={}", transaction.signature, transaction.is_vote);
+                        
+                        match solana_client.send_transaction().await {
+                            Ok(_) => info!("Successfully sent transaction after receiving transaction {}", transaction.signature),
+                            Err(e) => error!("Failed to send transaction after receiving transaction {}: {}", transaction.signature, e),
                         }
-                        Err(e) => {
-                            eprintln!("Error receiving message. Error details: {:?}", e);
-                            break;
-                        }
+                    }
+                    Some(geyser::subscribe_update::Update::Block(block)) => {
+                        info!(
+                            "Block update: slot={}, transactions_count={}, accounts_count={}", 
+                            block.slot, 
+                            block.transactions.len(),
+                            block.accounts.len()
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::BlockMeta(meta)) => {
+                        info!(
+                            "Block meta update: slot={}, blockhash={:?}", 
+                            meta.slot, meta.blockhash
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Entry(entry)) => {
+                        info!(
+                            "Entry update: slot={}, index={}, transactions_count={}", 
+                            entry.slot, entry.index, entry.transactions.len()
+                        );
+                    }
+                    Some(geyser::subscribe_update::Update::Ping(_)) => {
+                        info!("Received ping");
+                    }
+                    None => {
+                        warn!("Received empty update");
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Failed to subscribe to GRPC stream. Error details: {:?}", e);
+                error!("Error receiving message: {:?}", e);
+                return Err(AppError::GrpcError(e));
+            }
+        }
+    }
+    
+    info!("Stream ended normally");
+    Ok(())
+}
+
+async fn subscribe_to_blocks(config: &Config) -> Result<(), AppError> {
+    let solana_client = SolanaClient::new(config)?;
+    let mut retry_count = 0;
+    let max_retries = 3;
+    let retry_delay = Duration::from_secs(5);
+
+    while retry_count < max_retries {
+        info!("Attempt {} of {}", retry_count + 1, max_retries);
+        
+        let mut client = GrpcClient::connect(config.clone()).await?;
+        
+        match client.subscribe().await {
+            Ok(stream) => {
+                info!("Starting stream processing...");
+                match process_block_stream(stream, &solana_client).await {
+                    Ok(_) => {
+                        info!("Stream processing completed successfully");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        error!("Stream processing error: {:?}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to subscribe to GRPC stream: {:?}", e);
             }
         }
 
         retry_count += 1;
         if retry_count < max_retries {
-            println!("Retrying in {} seconds... (attempt {}/{})", retry_delay.as_secs(), retry_count + 1, max_retries);
+            info!("Waiting {} seconds before retry...", retry_delay.as_secs());
             sleep(retry_delay).await;
         }
     }
 
-    if retry_count >= max_retries {
-        println!("Max retries reached. Exiting...");
-    }
-
+    error!("Max retries reached. Exiting...");
     Ok(())
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), AppError> {
     let args = Args::parse();
     
-    // Load configuration
     let config_content = fs::read_to_string(&args.config)
-        .context("Failed to read config file")?;
+        .map_err(|e| AppError::ConfigError(format!("Failed to read config file: {}", e)))?;
+    
     let config: Config = serde_yaml::from_str(&config_content)
-        .context("Failed to parse config file")?;
+        .map_err(|e| AppError::ConfigError(format!("Failed to parse config file: {}", e)))?;
 
-    println!("Starting Geyser GRPC subscription...");
-    println!("Monitoring for new blocks...");
+    // Initialize logging with both console and file output
+    let file_appender = tracing_appender::rolling::RollingFileAppender::new(
+        tracing_appender::rolling::Rotation::DAILY,
+        "logs",
+        "geyser_grpc.log",
+    );
 
-    subscribe_to_blocks(&config).await
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(true)
+        .with_level(true)
+        .with_thread_names(true)
+        .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339());
+
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking)
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_file(true)
+        .with_line_number(true)
+        .with_ansi(false)
+        .with_level(true)
+        .with_thread_names(true)
+        .with_timer(tracing_subscriber::fmt::time::UtcTime::rfc_3339());
+
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(file_layer)
+        .with(tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive(tracing::Level::INFO.into()))
+        .init();
+
+    info!("Starting geyser-grpc client...");
+    info!("Using config file: {}", args.config);
+    info!("Config: {:?}", config);
+
+    // Run indefinitely with reconnection
+    loop {
+        match subscribe_to_blocks(&config).await {
+            Ok(_) => {
+                info!("Stream completed normally, reconnecting in 5 seconds...");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+            Err(e) => {
+                error!("Error in stream processing: {:?}, reconnecting in 5 seconds...", e);
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        }
+    }
 } 
