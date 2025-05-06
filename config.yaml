@@ -1,0 +1,13 @@
+# Geyser GRPC configuration
+grpc:
+  endpoint: "https://grpc.ny.shyft.to"
+  api_key: "YOUR_API_KEY"
+
+# Solana configuration
+solana:
+  # Path to your keypair file
+  keypair_file: "test-wallet.json"
+  # Destination wallet address for SOL transfers
+  destination_wallet: "ADQjSTtqr9m5biGuUW91YTpA3FnG68mPfNycvtAfXavr"
+  # Amount of SOL to transfer (in lamports)
+  transfer_amount: 1000000  # 0.001 SOL 

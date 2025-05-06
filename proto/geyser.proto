@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package geyser;
+
+service Geyser {
+    rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+}
+
+message SubscribeRequest {
+    repeated SubscribeRequestFilter filters = 1;
+    CommitmentLevel commitment = 2;
+}
+
+message SubscribeRequestFilter {
+    oneof filter {
+        AccountFilter account = 1;
+        SlotFilter slot = 2;
+        TransactionFilter transaction = 3;
+        BlockFilter block = 4;
+    }
+}
+
+message AccountFilter {
+    string account = 1;
+    bool owner = 2;
+    repeated string filters = 3;
+}
+
+message SlotFilter {
+    bool filter_by_commitment = 1;
+}
+
+message TransactionFilter {
+    string vote = 1;
+    bool failed = 2;
+    string signature = 3;
+    string account_include = 4;
+    string account_exclude = 5;
+}
+
+message BlockFilter {
+    bool filter_by_commitment = 1;
+}
+
+enum CommitmentLevel {
+    PROCESSED = 0;
+    CONFIRMED = 1;
+    FINALIZED = 2;
+}
+
+message SubscribeResponse {
+    oneof response {
+        SlotUpdate slot = 1;
+        BlockUpdate block = 2;
+        TransactionUpdate transaction = 3;
+        AccountUpdate account = 4;
+    }
+}
+
+message SlotUpdate {
+    uint64 slot = 1;
+    string parent = 2;
+    CommitmentLevel commitment = 3;
+}
+
+message BlockUpdate {
+    uint64 slot = 1;
+    string blockhash = 2;
+    uint64 block_time = 3;
+    CommitmentLevel commitment = 4;
+}
+
+message TransactionUpdate {
+    string signature = 1;
+    bool is_vote = 2;
+    TransactionInfo transaction = 3;
+    CommitmentLevel commitment = 4;
+}
+
+message TransactionInfo {
+    bytes transaction = 1;
+    TransactionStatus meta = 2;
+}
+
+message TransactionStatus {
+    uint64 slot = 1;
+    string err = 2;
+    repeated string logs = 3;
+}
+
+message AccountUpdate {
+    string account = 1;
+    uint64 slot = 2;
+    bytes data = 3;
+    string owner = 4;
+    CommitmentLevel commitment = 5;
+} 
