@@ -1,6 +1,6 @@
 # Geyser GRPC configuration
 grpc_url: "https://grpc.ny.shyft.to"
-grpc_x_token: "YOUR_API_KEY"
+grpc_x_token: "b2b972c6-fff2-4b5c-aac9-375c6984b80e"
 
 # Solana configuration
 keypair_file: "test-wallet2.json"

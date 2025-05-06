@@ -10,7 +10,7 @@ use solana_client::rpc_client::RpcClient;
 use std::{str::FromStr, time::Duration};
 use serde::Deserialize;
 use std::fs;
-use tonic::{metadata::MetadataValue, Request, transport::{Channel, ClientTlsConfig}};
+use tonic::transport::{Channel, ClientTlsConfig};
 use futures::StreamExt;
 use tokio::time::sleep;
 use tracing::{info, error, warn};
@@ -25,11 +25,9 @@ mod geyser {
 
 use geyser::{
     geyser_client::GeyserClient,
-    CommitmentLevel as GeyserCommitmentLevel,
     SubscribeRequest,
     SubscribeRequestFilterBlocks,
     SubscribeRequestFilterSlots,
-    SubscribeRequestFilterTransactions,
 };
 
 #[derive(Error, Debug)]
@@ -118,131 +116,126 @@ struct GrpcClient {
 }
 
 impl GrpcClient {
-    async fn connect(config: Config) -> Result<Self> {
-        let channel = Channel::from_shared(config.grpc_url.clone())?
+    async fn connect(config: Config) -> Result<Self, AppError> {
+        let channel = Channel::from_shared(config.grpc_url.clone())
+            .map_err(|e| anyhow::anyhow!("Invalid URI: {}", e))?
             .tls_config(ClientTlsConfig::new())?
             .connect()
             .await?;
 
-        let client = GeyserClient::new(channel);
-
-        Ok(Self { client, config })
+        Ok(Self {
+            client: GeyserClient::new(channel),
+            config,
+        })
     }
 
-    async fn subscribe(&mut self) -> Result<tonic::Streaming<geyser::SubscribeUpdate>> {
-        let mut blocks_map = HashMap::new();
-        blocks_map.insert("blocks".to_string(), SubscribeRequestFilterBlocks {
-            account_include: vec![],
-            include_transactions: false,
-            include_accounts: false,
-            include_entries: false,
-        });
-
+    async fn subscribe(&mut self) -> Result<tonic::Streaming<geyser::SubscribeUpdate>, AppError> {
         let mut slots_map = HashMap::new();
-        slots_map.insert("slots".to_string(), SubscribeRequestFilterSlots {
-            filter_by_commitment: true,
-        });
+        slots_map.insert(
+            "slots".to_string(),
+            SubscribeRequestFilterSlots {
+                filter_by_commitment: true,
+            },
+        );
 
-        let request = Request::new(SubscribeRequest {
+        let mut blocks_map = HashMap::new();
+        blocks_map.insert(
+            "blocks".to_string(),
+            SubscribeRequestFilterBlocks {
+                account_include: vec![],
+                include_transactions: true,
+                include_accounts: true,
+                include_entries: true,
+            },
+        );
+
+        let request = SubscribeRequest {
             accounts: HashMap::new(),
             slots: slots_map,
             transactions: HashMap::new(),
             blocks: blocks_map,
             blocks_meta: HashMap::new(),
             entry: HashMap::new(),
-            commitment: GeyserCommitmentLevel::Confirmed as i32,
+            commitment: 1,
             accounts_data_slice: vec![],
             ping: true,
-        });
+        };
 
-        info!("Creating subscription request with filters: {:?}", request.get_ref());
+        info!("Creating subscription request with filters: {:?}", request);
 
-        let token = MetadataValue::from_str(&self.config.grpc_x_token)
-            .map_err(|e| anyhow::anyhow!("Failed to create metadata value: {}", e))?;
-        
-        let mut request = request;
-        request.metadata_mut().insert("x-token", token);
+        let mut request = tonic::Request::new(request);
+        request.metadata_mut().insert(
+            "x-token",
+            self.config.grpc_x_token.parse().unwrap(),
+        );
 
         info!("Created subscription request with metadata");
+
         let response = self.client.subscribe(request).await?;
         info!("Successfully subscribed to GRPC stream");
-        
+
         Ok(response.into_inner())
     }
 }
 
 async fn process_block_stream(
     mut stream: tonic::Streaming<geyser::SubscribeUpdate>,
-    solana_client: &SolanaClient,
+    _solana_client: &SolanaClient,
 ) -> Result<(), AppError> {
     info!("Starting to process stream...");
     
     while let Some(response) = stream.next().await {
         match response {
             Ok(msg) => {
-                // Log raw message for debugging
-                info!("Received raw message: {:?}", msg);
+                let update_type = msg.update.as_ref().map_or("None".to_string(), |u| match u {
+                    geyser::subscribe_update::Update::Account(_) => "Account".to_string(),
+                    geyser::subscribe_update::Update::Slot(_) => "Slot".to_string(),
+                    geyser::subscribe_update::Update::Block(_) => "Block".to_string(),
+                    geyser::subscribe_update::Update::BlockMeta(_) => "BlockMeta".to_string(),
+                    geyser::subscribe_update::Update::Entry(_) => "Entry".to_string(),
+                    geyser::subscribe_update::Update::Ping(_) => "Ping".to_string(),
+                    geyser::subscribe_update::Update::Transaction(_) => "Transaction".to_string(),
+                });
+                info!("Received message type: {:?}", update_type);
                 
                 match msg.update {
                     Some(geyser::subscribe_update::Update::Account(account)) => {
                         info!(
-                            "Account update: pubkey={}, owner={}, lamports={}, slot={}\nRaw data: {:?}", 
+                            "Account update: pubkey={}, owner={}, lamports={}, slot={}", 
                             account.pubkey, account.owner, account.lamports, account.slot,
-                            account.data
                         );
                     }
                     Some(geyser::subscribe_update::Update::Slot(slot)) => {
                         info!(
-                            "Slot update: slot={}, parent={}, status={}\nRaw data: {:?}", 
+                            "Slot update: slot={}, parent={}, status={}", 
                             slot.slot, slot.parent, slot.status,
-                            slot
                         );
-                    }
-                    Some(geyser::subscribe_update::Update::Transaction(transaction)) => {
-                        info!(
-                            "Transaction update: signature={}, is_vote={}\nTransaction info: {:?}", 
-                            transaction.signature, transaction.is_vote,
-                            transaction.transaction
-                        );
-                        
-                        match solana_client.send_transaction().await {
-                            Ok(_) => info!("Successfully sent transaction after receiving transaction {}", transaction.signature),
-                            Err(e) => error!("Failed to send transaction after receiving transaction {}: {}", transaction.signature, e),
-                        }
                     }
                     Some(geyser::subscribe_update::Update::Block(block)) => {
                         info!(
-                            "Block update: slot={}, transactions_count={}, accounts_count={}\nRaw block data: {:?}", 
+                            "Block update: slot={}, transactions_count={}, accounts_count={}", 
                             block.slot, 
                             block.transactions.len(),
                             block.accounts.len(),
-                            block
                         );
-                        
-                        // Log individual transactions in the block
-                        for (i, tx) in block.transactions.iter().enumerate() {
-                            info!(
-                                "Block transaction {}: slot={}, signature={}, is_vote={}", 
-                                i, tx.slot, tx.signature, tx.is_vote
-                            );
-                        }
                     }
                     Some(geyser::subscribe_update::Update::BlockMeta(meta)) => {
                         info!(
-                            "Block meta update: slot={}, blockhash={:?}\nRaw meta: {:?}", 
+                            "Block meta update: slot={}, blockhash={:?}", 
                             meta.slot, meta.blockhash,
-                            meta
                         );
                     }
                     Some(geyser::subscribe_update::Update::Entry(entry)) => {
                         info!(
-                            "Entry update: slot={}, index={}, transactions_count={}\nRaw entry: {:?}", 
+                            "Entry update: slot={}, index={}, transactions_count={}", 
                             entry.slot, entry.index, entry.transactions.len(),
-                            entry
                         );
                     }
                     Some(geyser::subscribe_update::Update::Ping(_)) => {
-                        info!("Received ping");
+                        info!("Received ping response");
+                    }
+                    Some(geyser::subscribe_update::Update::Transaction(_)) => {
+                        info!("Received transaction update (unexpected)");
                     }
                     None => {
                         warn!("Received empty update");
@@ -250,13 +243,13 @@ async fn process_block_stream(
                 }
             }
             Err(e) => {
-                error!("Error receiving message: {:?}\nError details: {:#?}", e, e);
+                error!("Error receiving message: {:?}", e);
                 warn!("Continuing to listen for messages after error");
             }
         }
     }
     
-    info!("Stream ended normally");
+    info!("Stream ended");
     Ok(())
 }
 
@@ -265,26 +258,25 @@ async fn subscribe_to_blocks(config: &Config) -> Result<(), AppError> {
     let retry_delay = Duration::from_secs(5);
 
     loop {
-        info!("Attempting to connect to GRPC server...");
+        info!("Attempting to connect to GRPC server at {}", config.grpc_url);
         
         match GrpcClient::connect(config.clone()).await {
             Ok(mut client) => {
-                info!("Successfully connected to GRPC server");
+                info!("Successfully connected to GRPC server. Creating subscription...");
                 
                 match client.subscribe().await {
                     Ok(stream) => {
-                        info!("Starting stream processing...");
+                        info!("Successfully created subscription stream");
                         match process_block_stream(stream, &solana_client).await {
                             Ok(_) => {
-                                info!("Stream ended, waiting {} seconds before reconnecting...", retry_delay.as_secs());
+                                info!("Stream processing completed normally");
+                                info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
                                 sleep(retry_delay).await;
-                                continue;
                             }
                             Err(e) => {
                                 error!("Stream processing error: {:?}", e);
                                 info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
                                 sleep(retry_delay).await;
-                                continue;
                             }
                         }
                     }
@@ -292,7 +284,6 @@ async fn subscribe_to_blocks(config: &Config) -> Result<(), AppError> {
                         error!("Failed to subscribe to GRPC stream: {:?}", e);
                         info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
                         sleep(retry_delay).await;
-                        continue;
                     }
                 }
             }
@@ -300,7 +291,6 @@ async fn subscribe_to_blocks(config: &Config) -> Result<(), AppError> {
                 error!("Failed to connect to GRPC server: {:?}", e);
                 info!("Waiting {} seconds before reconnecting...", retry_delay.as_secs());
                 sleep(retry_delay).await;
-                continue;
             }
         }
     }
